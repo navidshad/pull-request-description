@@ -1,7 +1,0 @@
-{
-  "name": "chatgpt-pr-description",
-  "dependencies": {
-    "@actions/core": "^1.10.0",
-    "openai": "^4.0.0"
-  }
-}
