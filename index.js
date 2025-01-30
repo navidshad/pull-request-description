@@ -1,43 +1,41 @@
 const core = require('@actions/core');
-const { execSync } = require('child_process');
 const OpenAI = require('openai');
 
 async function run() {
   try {
-    // Get inputs
     const apiKey = core.getInput('api_key');
-    const userPrompt = core.getInput('prompt');
-    const gitDiff = core.getInput('git_diff');
+    const prompt = core.getInput('prompt');
+    const rawDiff = core.getInput('git_diff');
 
-    // Configure OpenAI client
+    // Decodificar y sanitizar el diff
+    const gitDiff = decodeURIComponent(rawDiff)
+      .replace(/\\/g, '\\\\')
+      .replace(/`/g, '\\`')
+      .replace(/\$/g, '\\$');
+
     const openai = new OpenAI({ apiKey });
 
-    // Create combined prompt
-    const messages = [
-      {
-        role: "system",
-        content: "You are an expert code review assistant. Generate a clear and concise description for a Pull Request based on the changes provided."
-      },
-      {
-        role: "user",
-        content: `${userPrompt}\n\nCode Changes:\n\`\`\`diff\n${gitDiff}\n\`\`\``
-      }
-    ];
-
-    // Call the ChatGPT API
     const completion = await openai.chat.completions.create({
-      messages,
+      messages: [{
+        role: "system",
+        content: "You are an expert code review assistant. Generate a clear and concise description for a Pull Request based on the changes provided using a valid Markdown."
+      },{
+        role: "user",
+        content: `${prompt}\n\nDIFF:\n\`\`\`diff\n${gitDiff}\n\`\`\``
+      }],
       model: "gpt-4-turbo",
       temperature: 0.7,
-      max_tokens: 500
+      max_tokens: 1000
     });
 
-    // Get and save response
-    const description = completion.choices[0].message.content;
+    const description = completion.choices[0].message.content
+      .replace(/```/g, '\\`\\`\\`')  // Escapar code blocks
+      .replace(/\${/g, '\\${');      // Escapar template literals
+
     core.setOutput('description', description);
 
   } catch (error) {
-    core.setFailed(`Error: ${error.message}`);
+    core.setFailed(`Action failed: ${error.message}`);
   }
 }
 
