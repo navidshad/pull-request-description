@@ -25,7 +25,7 @@ async function run() {
       }],
       model: "gpt-4-turbo",
       temperature: 0.7,
-      max_tokens: 15000
+      max_tokens: 4096
     });
 
     const description = completion.choices[0].message.content
