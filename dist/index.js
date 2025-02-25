@@ -41552,6 +41552,14 @@ async function run() {
     const apiKey = core.getInput('api_key');
     const prompt = core.getInput('prompt');
     const rawDiff = core.getInput('git_diff');
+    const rawDiffFile = core.getInput('git_diff_file');
+
+    if (rawDiffFile) {
+      const fs = __nccwpck_require__(9896);
+      const path = __nccwpck_require__(6928);
+      const diff = fs.readFileSync(path.join(__dirname, rawDiffFile), 'utf8');
+      rawDiff = diff;
+    }
 
     // Decodificar y sanitizar el diff
     const gitDiff = decodeURIComponent(rawDiff)
@@ -41571,7 +41579,7 @@ async function run() {
       }],
       model: "gpt-4-turbo",
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 4096
     });
 
     const description = completion.choices[0].message.content
@@ -41586,6 +41594,7 @@ async function run() {
 }
 
 run();
+
 module.exports = __webpack_exports__;
 /******/ })()
 ;
