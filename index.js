@@ -6,6 +6,14 @@ async function run() {
     const apiKey = core.getInput('api_key');
     const prompt = core.getInput('prompt');
     const rawDiff = core.getInput('git_diff');
+    const rawDiffFile = core.getInput('git_diff_file');
+
+    if (rawDiffFile) {
+      const fs = require('fs');
+      const path = require('path');
+      const diff = fs.readFileSync(path.join(__dirname, rawDiffFile), 'utf8');
+      rawDiff = diff;
+    }
 
     // Decodificar y sanitizar el diff
     const gitDiff = decodeURIComponent(rawDiff)
