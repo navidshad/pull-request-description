@@ -34906,6 +34906,7 @@ class APIClient {
         return null;
     }
     buildRequest(options, { retryCount = 0 } = {}) {
+        options = { ...options };
         const { method, path, query, headers: headers = {} } = options;
         const body = ArrayBuffer.isView(options.body) || (options.__binaryRequest && typeof options.body === 'string') ?
             options.body
@@ -34916,9 +34917,9 @@ class APIClient {
         const url = this.buildURL(path, query);
         if ('timeout' in options)
             validatePositiveInteger('timeout', options.timeout);
-        const timeout = options.timeout ?? this.timeout;
+        options.timeout = options.timeout ?? this.timeout;
         const httpAgent = options.httpAgent ?? this.httpAgent ?? (0, index_1.getDefaultAgent)(url);
-        const minAgentTimeout = timeout + 1000;
+        const minAgentTimeout = options.timeout + 1000;
         if (typeof httpAgent?.options?.timeout === 'number' &&
             minAgentTimeout > (httpAgent.options.timeout ?? 0)) {
             // Allow any given request to bump our agent active socket timeout.
@@ -34942,7 +34943,7 @@ class APIClient {
             // not compatible with standard web types
             signal: options.signal ?? null,
         };
-        return { req, url, timeout };
+        return { req, url, timeout: options.timeout };
     }
     buildHeaders({ options, headers, contentLength, retryCount, }) {
         const reqHeaders = {};
@@ -34956,12 +34957,17 @@ class APIClient {
         if ((0, uploads_1.isMultipartBody)(options.body) && index_1.kind !== 'node') {
             delete reqHeaders['content-type'];
         }
-        // Don't set the retry count header if it was already set or removed through default headers or by the
-        // caller. We check `defaultHeaders` and `headers`, which can contain nulls, instead of `reqHeaders` to
-        // account for the removal case.
+        // Don't set theses headers if they were already set or removed through default headers or by the caller.
+        // We check `defaultHeaders` and `headers`, which can contain nulls, instead of `reqHeaders` to account
+        // for the removal case.
         if ((0, exports.getHeader)(defaultHeaders, 'x-stainless-retry-count') === undefined &&
             (0, exports.getHeader)(headers, 'x-stainless-retry-count') === undefined) {
             reqHeaders['x-stainless-retry-count'] = String(retryCount);
+        }
+        if ((0, exports.getHeader)(defaultHeaders, 'x-stainless-timeout') === undefined &&
+            (0, exports.getHeader)(headers, 'x-stainless-timeout') === undefined &&
+            options.timeout) {
+            reqHeaders['x-stainless-timeout'] = String(options.timeout);
         }
         this.validateHeaders(reqHeaders, headers);
         return reqHeaders;
@@ -35256,6 +35262,7 @@ const requestOptionsKeys = {
     httpAgent: true,
     signal: true,
     idempotencyKey: true,
+    __metadata: true,
     __binaryRequest: true,
     __binaryResponse: true,
     __streamClass: true,
@@ -35839,6 +35846,7 @@ const beta_1 = __nccwpck_require__(8852);
 const chat_1 = __nccwpck_require__(3164);
 const fine_tuning_1 = __nccwpck_require__(198);
 const uploads_1 = __nccwpck_require__(9962);
+const completions_2 = __nccwpck_require__(1963);
 /**
  * API Client for interfacing with the OpenAI API.
  */
@@ -35935,6 +35943,7 @@ OpenAI.toFile = Uploads.toFile;
 OpenAI.fileFromPath = Uploads.fileFromPath;
 OpenAI.Completions = completions_1.Completions;
 OpenAI.Chat = chat_1.Chat;
+OpenAI.ChatCompletionsPage = completions_2.ChatCompletionsPage;
 OpenAI.Embeddings = embeddings_1.Embeddings;
 OpenAI.Files = files_1.Files;
 OpenAI.FileObjectsPage = files_1.FileObjectsPage;
@@ -36013,7 +36022,7 @@ class AzureOpenAI extends OpenAI {
             if (!Core.isObj(options.body)) {
                 throw new Error('Expected request body to be an object');
             }
-            const model = this.deploymentName || options.body['model'];
+            const model = this.deploymentName || options.body['model'] || options.__metadata?.['model'];
             if (model !== undefined && !this.baseURL.includes('/deployments')) {
                 options.path = `/deployments/${model}${options.path}`;
             }
@@ -36094,12 +36103,24 @@ exports["default"] = OpenAI;
 /***/ }),
 
 /***/ 717:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
+var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
+    if (kind === "m") throw new TypeError("Private method is not writable");
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+    return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
+};
+var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+    return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+};
+var _LineDecoder_carriageReturnIndex;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.LineDecoder = void 0;
+exports.findDoubleNewlineIndex = exports.LineDecoder = void 0;
 const error_1 = __nccwpck_require__(3269);
 /**
  * A re-implementation of httpx's `LineDecoder` in Python that handles incrementally
@@ -36109,39 +36130,42 @@ const error_1 = __nccwpck_require__(3269);
  */
 class LineDecoder {
     constructor() {
-        this.buffer = [];
-        this.trailingCR = false;
+        _LineDecoder_carriageReturnIndex.set(this, void 0);
+        this.buffer = new Uint8Array();
+        __classPrivateFieldSet(this, _LineDecoder_carriageReturnIndex, null, "f");
     }
     decode(chunk) {
-        let text = this.decodeText(chunk);
-        if (this.trailingCR) {
-            text = '\r' + text;
-            this.trailingCR = false;
-        }
-        if (text.endsWith('\r')) {
-            this.trailingCR = true;
-            text = text.slice(0, -1);
-        }
-        if (!text) {
+        if (chunk == null) {
             return [];
         }
-        const trailingNewline = LineDecoder.NEWLINE_CHARS.has(text[text.length - 1] || '');
-        let lines = text.split(LineDecoder.NEWLINE_REGEXP);
-        // if there is a trailing new line then the last entry will be an empty
-        // string which we don't care about
-        if (trailingNewline) {
-            lines.pop();
-        }
-        if (lines.length === 1 && !trailingNewline) {
-            this.buffer.push(lines[0]);
-            return [];
-        }
-        if (this.buffer.length > 0) {
-            lines = [this.buffer.join('') + lines[0], ...lines.slice(1)];
-            this.buffer = [];
-        }
-        if (!trailingNewline) {
-            this.buffer = [lines.pop() || ''];
+        const binaryChunk = chunk instanceof ArrayBuffer ? new Uint8Array(chunk)
+            : typeof chunk === 'string' ? new TextEncoder().encode(chunk)
+                : chunk;
+        let newData = new Uint8Array(this.buffer.length + binaryChunk.length);
+        newData.set(this.buffer);
+        newData.set(binaryChunk, this.buffer.length);
+        this.buffer = newData;
+        const lines = [];
+        let patternIndex;
+        while ((patternIndex = findNewlineIndex(this.buffer, __classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f"))) != null) {
+            if (patternIndex.carriage && __classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f") == null) {
+                // skip until we either get a corresponding `\n`, a new `\r` or nothing
+                __classPrivateFieldSet(this, _LineDecoder_carriageReturnIndex, patternIndex.index, "f");
+                continue;
+            }
+            // we got double \r or \rtext\n
+            if (__classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f") != null &&
+                (patternIndex.index !== __classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f") + 1 || patternIndex.carriage)) {
+                lines.push(this.decodeText(this.buffer.slice(0, __classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f") - 1)));
+                this.buffer = this.buffer.slice(__classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f"));
+                __classPrivateFieldSet(this, _LineDecoder_carriageReturnIndex, null, "f");
+                continue;
+            }
+            const endIndex = __classPrivateFieldGet(this, _LineDecoder_carriageReturnIndex, "f") !== null ? patternIndex.preceding - 1 : patternIndex.preceding;
+            const line = this.decodeText(this.buffer.slice(0, endIndex));
+            lines.push(line);
+            this.buffer = this.buffer.slice(patternIndex.index);
+            __classPrivateFieldSet(this, _LineDecoder_carriageReturnIndex, null, "f");
         }
         return lines;
     }
@@ -36171,19 +36195,66 @@ class LineDecoder {
         throw new error_1.OpenAIError(`Unexpected: neither Buffer nor TextDecoder are available as globals. Please report this error.`);
     }
     flush() {
-        if (!this.buffer.length && !this.trailingCR) {
+        if (!this.buffer.length) {
             return [];
         }
-        const lines = [this.buffer.join('')];
-        this.buffer = [];
-        this.trailingCR = false;
-        return lines;
+        return this.decode('\n');
     }
 }
 exports.LineDecoder = LineDecoder;
+_LineDecoder_carriageReturnIndex = new WeakMap();
 // prettier-ignore
 LineDecoder.NEWLINE_CHARS = new Set(['\n', '\r']);
 LineDecoder.NEWLINE_REGEXP = /\r\n|[\n\r]/g;
+/**
+ * This function searches the buffer for the end patterns, (\r or \n)
+ * and returns an object with the index preceding the matched newline and the
+ * index after the newline char. `null` is returned if no new line is found.
+ *
+ * ```ts
+ * findNewLineIndex('abc\ndef') -> { preceding: 2, index: 3 }
+ * ```
+ */
+function findNewlineIndex(buffer, startIndex) {
+    const newline = 0x0a; // \n
+    const carriage = 0x0d; // \r
+    for (let i = startIndex ?? 0; i < buffer.length; i++) {
+        if (buffer[i] === newline) {
+            return { preceding: i, index: i + 1, carriage: false };
+        }
+        if (buffer[i] === carriage) {
+            return { preceding: i, index: i + 1, carriage: true };
+        }
+    }
+    return null;
+}
+function findDoubleNewlineIndex(buffer) {
+    // This function searches the buffer for the end patterns (\r\r, \n\n, \r\n\r\n)
+    // and returns the index right after the first occurrence of any pattern,
+    // or -1 if none of the patterns are found.
+    const newline = 0x0a; // \n
+    const carriage = 0x0d; // \r
+    for (let i = 0; i < buffer.length - 1; i++) {
+        if (buffer[i] === newline && buffer[i + 1] === newline) {
+            // \n\n
+            return i + 2;
+        }
+        if (buffer[i] === carriage && buffer[i + 1] === carriage) {
+            // \r\r
+            return i + 2;
+        }
+        if (buffer[i] === carriage &&
+            buffer[i + 1] === newline &&
+            i + 3 < buffer.length &&
+            buffer[i + 2] === carriage &&
+            buffer[i + 3] === newline) {
+            // \r\n\r\n
+            return i + 4;
+        }
+    }
+    return -1;
+}
+exports.findDoubleNewlineIndex = findDoubleNewlineIndex;
 //# sourceMappingURL=line.js.map
 
 /***/ }),
@@ -37515,6 +37586,7 @@ _AssistantStream_addEvent = function _AssistantStream_addEvent(event) {
         case 'thread.run.in_progress':
         case 'thread.run.requires_action':
         case 'thread.run.completed':
+        case 'thread.run.incomplete':
         case 'thread.run.failed':
         case 'thread.run.cancelling':
         case 'thread.run.cancelled':
@@ -37540,6 +37612,8 @@ _AssistantStream_addEvent = function _AssistantStream_addEvent(event) {
         case 'error':
             //This is included for completeness, but errors are processed in the SSE event processing so this should not occur
             throw new Error('Encountered an error event in event processing - errors should be processed earlier');
+        default:
+            assertNever(event);
     }
 }, _AssistantStream_endRequest = function _AssistantStream_endRequest() {
     if (this.ended) {
@@ -37759,6 +37833,7 @@ _AssistantStream_addEvent = function _AssistantStream_addEvent(event) {
             break;
     }
 };
+function assertNever(_x) { }
 //# sourceMappingURL=AssistantStream.js.map
 
 /***/ }),
@@ -38720,7 +38795,15 @@ function maybeParseChatCompletion(completion, params) {
             ...completion,
             choices: completion.choices.map((choice) => ({
                 ...choice,
-                message: { ...choice.message, parsed: null, tool_calls: choice.message.tool_calls ?? [] },
+                message: {
+                    ...choice.message,
+                    parsed: null,
+                    ...(choice.message.tool_calls ?
+                        {
+                            tool_calls: choice.message.tool_calls,
+                        }
+                        : undefined),
+                },
             })),
         };
     }
@@ -38739,7 +38822,11 @@ function parseChatCompletion(completion, params) {
             ...choice,
             message: {
                 ...choice.message,
-                tool_calls: choice.message.tool_calls?.map((toolCall) => parseToolCall(params, toolCall)) ?? [],
+                ...(choice.message.tool_calls ?
+                    {
+                        tool_calls: choice.message.tool_calls?.map((toolCall) => parseToolCall(params, toolCall)) ?? undefined,
+                    }
+                    : undefined),
                 parsed: choice.message.content && !choice.message.refusal ?
                     parseResponseFormat(params, choice.message.content)
                     : null,
@@ -38842,9 +38929,16 @@ class CursorPage extends core_1.AbstractPage {
     constructor(client, response, body, options) {
         super(client, response, body, options);
         this.data = body.data || [];
+        this.has_more = body.has_more || false;
     }
     getPaginatedItems() {
         return this.data ?? [];
+    }
+    hasNextPage() {
+        if (this.has_more === false) {
+            return false;
+        }
+        return super.hasNextPage();
     }
     // @deprecated Please use `nextPageInfo()` instead
     nextPageParams() {
@@ -39009,7 +39103,7 @@ const resource_1 = __nccwpck_require__(5535);
 const Core = __importStar(__nccwpck_require__(7376));
 class Transcriptions extends resource_1.APIResource {
     create(body, options) {
-        return this._client.post('/audio/transcriptions', Core.multipartFormRequestOptions({ body, ...options }));
+        return this._client.post('/audio/transcriptions', Core.multipartFormRequestOptions({ body, ...options, __metadata: { model: body.model } }));
     }
 }
 exports.Transcriptions = Transcriptions;
@@ -39052,7 +39146,7 @@ const resource_1 = __nccwpck_require__(5535);
 const Core = __importStar(__nccwpck_require__(7376));
 class Translations extends resource_1.APIResource {
     create(body, options) {
-        return this._client.post('/audio/translations', Core.multipartFormRequestOptions({ body, ...options }));
+        return this._client.post('/audio/translations', Core.multipartFormRequestOptions({ body, ...options, __metadata: { model: body.model } }));
     }
 }
 exports.Translations = Translations;
@@ -40249,8 +40343,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Chat = void 0;
 const resource_1 = __nccwpck_require__(5535);
-const CompletionsAPI = __importStar(__nccwpck_require__(9567));
-const completions_1 = __nccwpck_require__(9567);
+const CompletionsAPI = __importStar(__nccwpck_require__(1963));
+const completions_1 = __nccwpck_require__(1963);
 class Chat extends resource_1.APIResource {
     constructor() {
         super(...arguments);
@@ -40259,26 +40353,137 @@ class Chat extends resource_1.APIResource {
 }
 exports.Chat = Chat;
 Chat.Completions = completions_1.Completions;
+Chat.ChatCompletionsPage = completions_1.ChatCompletionsPage;
 //# sourceMappingURL=chat.js.map
 
 /***/ }),
 
-/***/ 9567:
+/***/ 1963:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ChatCompletionStoreMessagesPage = exports.ChatCompletionsPage = exports.Completions = void 0;
+const resource_1 = __nccwpck_require__(5535);
+const core_1 = __nccwpck_require__(7376);
+const MessagesAPI = __importStar(__nccwpck_require__(7294));
+const messages_1 = __nccwpck_require__(7294);
+const pagination_1 = __nccwpck_require__(1035);
+class Completions extends resource_1.APIResource {
+    constructor() {
+        super(...arguments);
+        this.messages = new MessagesAPI.Messages(this._client);
+    }
+    create(body, options) {
+        return this._client.post('/chat/completions', { body, ...options, stream: body.stream ?? false });
+    }
+    /**
+     * Get a stored chat completion. Only chat completions that have been created with
+     * the `store` parameter set to `true` will be returned.
+     */
+    retrieve(completionId, options) {
+        return this._client.get(`/chat/completions/${completionId}`, options);
+    }
+    /**
+     * Modify a stored chat completion. Only chat completions that have been created
+     * with the `store` parameter set to `true` can be modified. Currently, the only
+     * supported modification is to update the `metadata` field.
+     */
+    update(completionId, body, options) {
+        return this._client.post(`/chat/completions/${completionId}`, { body, ...options });
+    }
+    list(query = {}, options) {
+        if ((0, core_1.isRequestOptions)(query)) {
+            return this.list({}, query);
+        }
+        return this._client.getAPIList('/chat/completions', ChatCompletionsPage, { query, ...options });
+    }
+    /**
+     * Delete a stored chat completion. Only chat completions that have been created
+     * with the `store` parameter set to `true` can be deleted.
+     */
+    del(completionId, options) {
+        return this._client.delete(`/chat/completions/${completionId}`, options);
+    }
+}
+exports.Completions = Completions;
+class ChatCompletionsPage extends pagination_1.CursorPage {
+}
+exports.ChatCompletionsPage = ChatCompletionsPage;
+class ChatCompletionStoreMessagesPage extends pagination_1.CursorPage {
+}
+exports.ChatCompletionStoreMessagesPage = ChatCompletionStoreMessagesPage;
+Completions.ChatCompletionsPage = ChatCompletionsPage;
+Completions.Messages = messages_1.Messages;
+//# sourceMappingURL=completions.js.map
+
+/***/ }),
+
+/***/ 3768:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 // File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Completions = void 0;
+exports.Messages = exports.Completions = exports.ChatCompletionsPage = exports.ChatCompletionStoreMessagesPage = void 0;
+var completions_1 = __nccwpck_require__(1963);
+Object.defineProperty(exports, "ChatCompletionStoreMessagesPage", ({ enumerable: true, get: function () { return completions_1.ChatCompletionStoreMessagesPage; } }));
+Object.defineProperty(exports, "ChatCompletionsPage", ({ enumerable: true, get: function () { return completions_1.ChatCompletionsPage; } }));
+Object.defineProperty(exports, "Completions", ({ enumerable: true, get: function () { return completions_1.Completions; } }));
+var messages_1 = __nccwpck_require__(7294);
+Object.defineProperty(exports, "Messages", ({ enumerable: true, get: function () { return messages_1.Messages; } }));
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 7294:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ChatCompletionStoreMessagesPage = exports.Messages = void 0;
 const resource_1 = __nccwpck_require__(5535);
-class Completions extends resource_1.APIResource {
-    create(body, options) {
-        return this._client.post('/chat/completions', { body, ...options, stream: body.stream ?? false });
+const core_1 = __nccwpck_require__(7376);
+const completions_1 = __nccwpck_require__(1963);
+Object.defineProperty(exports, "ChatCompletionStoreMessagesPage", ({ enumerable: true, get: function () { return completions_1.ChatCompletionStoreMessagesPage; } }));
+class Messages extends resource_1.APIResource {
+    list(completionId, query = {}, options) {
+        if ((0, core_1.isRequestOptions)(query)) {
+            return this.list(completionId, {}, query);
+        }
+        return this._client.getAPIList(`/chat/completions/${completionId}/messages`, completions_1.ChatCompletionStoreMessagesPage, { query, ...options });
     }
 }
-exports.Completions = Completions;
-//# sourceMappingURL=completions.js.map
+exports.Messages = Messages;
+//# sourceMappingURL=messages.js.map
 
 /***/ }),
 
@@ -40289,11 +40494,13 @@ exports.Completions = Completions;
 
 // File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Completions = exports.Chat = void 0;
+exports.Completions = exports.ChatCompletionsPage = exports.ChatCompletionStoreMessagesPage = exports.Chat = void 0;
 var chat_1 = __nccwpck_require__(3164);
 Object.defineProperty(exports, "Chat", ({ enumerable: true, get: function () { return chat_1.Chat; } }));
-var completions_1 = __nccwpck_require__(9567);
-Object.defineProperty(exports, "Completions", ({ enumerable: true, get: function () { return completions_1.Completions; } }));
+var index_1 = __nccwpck_require__(3768);
+Object.defineProperty(exports, "ChatCompletionStoreMessagesPage", ({ enumerable: true, get: function () { return index_1.ChatCompletionStoreMessagesPage; } }));
+Object.defineProperty(exports, "ChatCompletionsPage", ({ enumerable: true, get: function () { return index_1.ChatCompletionsPage; } }));
+Object.defineProperty(exports, "Completions", ({ enumerable: true, get: function () { return index_1.Completions; } }));
 //# sourceMappingURL=index.js.map
 
 /***/ }),
@@ -40988,7 +41195,7 @@ Uploads.Parts = parts_1.Parts;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports._decodeChunks = exports._iterSSEMessages = exports.Stream = void 0;
+exports._iterSSEMessages = exports.Stream = void 0;
 const index_1 = __nccwpck_require__(9941);
 const error_1 = __nccwpck_require__(3269);
 const line_1 = __nccwpck_require__(717);
@@ -41210,7 +41417,7 @@ async function* iterSSEChunks(iterator) {
         newData.set(binaryChunk, data.length);
         data = newData;
         let patternIndex;
-        while ((patternIndex = findDoubleNewlineIndex(data)) !== -1) {
+        while ((patternIndex = (0, line_1.findDoubleNewlineIndex)(data)) !== -1) {
             yield data.slice(0, patternIndex);
             data = data.slice(patternIndex);
         }
@@ -41218,32 +41425,6 @@ async function* iterSSEChunks(iterator) {
     if (data.length > 0) {
         yield data;
     }
-}
-function findDoubleNewlineIndex(buffer) {
-    // This function searches the buffer for the end patterns (\r\r, \n\n, \r\n\r\n)
-    // and returns the index right after the first occurrence of any pattern,
-    // or -1 if none of the patterns are found.
-    const newline = 0x0a; // \n
-    const carriage = 0x0d; // \r
-    for (let i = 0; i < buffer.length - 2; i++) {
-        if (buffer[i] === newline && buffer[i + 1] === newline) {
-            // \n\n
-            return i + 2;
-        }
-        if (buffer[i] === carriage && buffer[i + 1] === carriage) {
-            // \r\r
-            return i + 2;
-        }
-        if (buffer[i] === carriage &&
-            buffer[i + 1] === newline &&
-            i + 3 < buffer.length &&
-            buffer[i + 2] === carriage &&
-            buffer[i + 3] === newline) {
-            // \r\n\r\n
-            return i + 4;
-        }
-    }
-    return -1;
 }
 class SSEDecoder {
     constructor() {
@@ -41286,16 +41467,6 @@ class SSEDecoder {
         return null;
     }
 }
-/** This is an internal helper function that's just used for testing */
-function _decodeChunks(chunks) {
-    const decoder = new line_1.LineDecoder();
-    const lines = [];
-    for (const chunk of chunks) {
-        lines.push(...decoder.decode(chunk));
-    }
-    return lines;
-}
-exports._decodeChunks = _decodeChunks;
 function partition(str, delimiter) {
     const index = str.indexOf(delimiter);
     if (index !== -1) {
@@ -41492,7 +41663,7 @@ const addFormValue = async (form, key, value) => {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.VERSION = void 0;
-exports.VERSION = '4.81.0'; // x-release-please-version
+exports.VERSION = '4.86.1'; // x-release-please-version
 //# sourceMappingURL=version.js.map
 
 /***/ }),
@@ -41551,7 +41722,15 @@ async function run() {
   try {
     const apiKey = core.getInput('api_key');
     const prompt = core.getInput('prompt');
-    const rawDiff = core.getInput('git_diff');
+    let rawDiff = core.getInput('git_diff');
+    const rawDiffFile = core.getInput('git_diff_file');
+    const path = __nccwpck_require__(6928);
+
+    if (rawDiffFile) {
+      const filePath = path.join(process.cwd(), rawDiffFile);
+      const fs = __nccwpck_require__(9896);
+      rawDiff = fs.readFileSync(filePath, 'utf8');
+    }
 
     // Decodificar y sanitizar el diff
     const gitDiff = decodeURIComponent(rawDiff)
@@ -41571,7 +41750,7 @@ async function run() {
       }],
       model: "gpt-4-turbo",
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 4096
     });
 
     const description = completion.choices[0].message.content
@@ -41586,6 +41765,7 @@ async function run() {
 }
 
 run();
+
 module.exports = __webpack_exports__;
 /******/ })()
 ;
