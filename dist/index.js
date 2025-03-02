@@ -41717,6 +41717,7 @@ module.exports = /*#__PURE__*/JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45
 var __webpack_exports__ = {};
 const core = __nccwpck_require__(7484);
 const OpenAI = __nccwpck_require__(2583);
+const fs = __nccwpck_require__(9896);
 
 async function run() {
   try {
@@ -41728,12 +41729,12 @@ async function run() {
 
     if (rawDiffFile) {
       const filePath = path.join(process.cwd(), rawDiffFile);
-      const fs = __nccwpck_require__(9896);
       rawDiff = fs.readFileSync(filePath, 'utf8');
     }
 
-    // Decodificar y sanitizar el diff
-    const gitDiff = decodeURIComponent(rawDiff)
+    const gitDiff = rawDiff.includes('%') ? decodeURIComponent(rawDiff) : rawDiff;
+
+    const sanitizedGitDiff = gitDiff
       .replace(/\\/g, '\\\\')
       .replace(/`/g, '\\`')
       .replace(/\$/g, '\\$');
@@ -41746,7 +41747,7 @@ async function run() {
         content: "You are an expert code review assistant. Generate a clear and concise description for a Pull Request based on the changes provided using a valid Markdown."
       },{
         role: "user",
-        content: `${prompt}\n\nDIFF:\n\`\`\`diff\n${gitDiff}\n\`\`\``
+        content: `${prompt}\n\nDIFF:\n\`\`\`diff\n${sanitizedGitDiff}\n\`\`\``
       }],
       model: "gpt-4-turbo",
       temperature: 0.7,
@@ -41754,8 +41755,8 @@ async function run() {
     });
 
     const description = completion.choices[0].message.content
-      .replace(/```/g, '\\`\\`\\`')  // Escapar code blocks
-      .replace(/\${/g, '\\${');      // Escapar template literals
+      .replace(/```/g, '\\`\\`\\`')
+      .replace(/\${/g, '\\${');
 
     core.setOutput('description', description);
 
