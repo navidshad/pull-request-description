@@ -41717,6 +41717,8 @@ module.exports = /*#__PURE__*/JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45
 var __webpack_exports__ = {};
 const core = __nccwpck_require__(7484);
 const OpenAI = __nccwpck_require__(2583);
+const fs = __nccwpck_require__(9896);
+const path = __nccwpck_require__(6928);
 
 async function run() {
   try {
@@ -41724,27 +41726,35 @@ async function run() {
     const prompt = core.getInput('prompt');
     let rawDiff = core.getInput('git_diff');
     const rawDiffFile = core.getInput('git_diff_file');
-    const path = __nccwpck_require__(6928);
+
+    core.debug(`Prompt: ${prompt}`);
+    core.debug(`Raw git_diff input: ${rawDiff || 'Empty'}`);
+    core.debug(`git_diff_file input: ${rawDiffFile || 'Not provided'}`);
 
     if (rawDiffFile) {
       const filePath = path.join(process.cwd(), rawDiffFile);
-      const fs = __nccwpck_require__(9896);
+      core.debug(`Reading file from: ${filePath}`);
       rawDiff = fs.readFileSync(filePath, 'utf8');
+      core.debug(`Raw diff from file (first 500 chars): ${rawDiff.substring(0, 500)}`);
     }
 
-    // Decodificar y sanitizar el diff
-    const gitDiff = decodeURIComponent(rawDiff)
+    core.debug('Sanitizing diff content...');
+    const gitDiff = rawDiff
       .replace(/\\/g, '\\\\')
       .replace(/`/g, '\\`')
       .replace(/\$/g, '\\$');
 
+    core.debug(`Sanitized diff (first 500 chars): ${gitDiff.substring(0, 500)}`);
+
+    core.debug('Initializing OpenAI client...');
     const openai = new OpenAI({ apiKey });
 
+    core.debug('Requesting completion from OpenAI...');
     const completion = await openai.chat.completions.create({
       messages: [{
         role: "system",
         content: "You are an expert code review assistant. Generate a clear and concise description for a Pull Request based on the changes provided using a valid Markdown."
-      },{
+      }, {
         role: "user",
         content: `${prompt}\n\nDIFF:\n\`\`\`diff\n${gitDiff}\n\`\`\``
       }],
@@ -41753,14 +41763,16 @@ async function run() {
       max_tokens: 4096
     });
 
+    core.debug('Processing OpenAI response...');
     const description = completion.choices[0].message.content
-      .replace(/```/g, '\\`\\`\\`')  // Escapar code blocks
-      .replace(/\${/g, '\\${');      // Escapar template literals
+      .replace(/```/g, '\\`\\`\\`')
+      .replace(/\${/g, '\\${');
+    core.debug(`Generated description (first 500 chars): ${description.substring(0, 500)}`);
 
     core.setOutput('description', description);
-
   } catch (error) {
     core.setFailed(`Action failed: ${error.message}`);
+    core.debug(`Full error stack: ${error.stack}`);
   }
 }
 
