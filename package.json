@@ -1,5 +1,5 @@
 {
-  "name": "pull-request-description",
+  "name": "gpt-pr-description",
   "version": "1.0.1",
   "main": "index.js",
   "dependencies": {

@@ -1,14 +1,18 @@
 # ChatGPT PR Description Action 🤖
 
-[![GitHub release](https://img.shields.io/github/v/release/alvarocperez/pull-request-description)](https://github.com/alvarocperez/pull-request-description/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> **📝 Note**: This is an improved fork of the original [pull-request-description](https://github.com/alvarocperez/pull-request-description) action by [@alvarocperez](https://github.com/alvarocperez), enhanced with configurable LLM model support.
 
 Automatically generate meaningful Pull Request descriptions using ChatGPT. This GitHub Action analyzes your code changes and creates a comprehensive PR description with summaries, technical details, and testing requirements.
 
 ## Features ✨
 
+- **🆕 Configurable LLM Models**: Choose from GPT-4, GPT-3.5, GPT-4o, and other OpenAI models
+- **💰 Cost Optimization**: Use more cost-effective models like GPT-4o-mini or GPT-3.5-turbo
+- **🔄 Backward Compatible**: All original features from the base action are preserved
 - Automated PR description generation based on code changes
-- Uses GPT-4 Turbo for high-quality analysis
+- Uses GPT-4o-mini by default for high-quality analysis
 - Customizable prompts to match your team's needs
 - Supports markdown formatting in descriptions
 - Handles large diffs and complex changes
@@ -18,7 +22,7 @@ Automatically generate meaningful Pull Request descriptions using ChatGPT. This 
 
 ### Prerequisites
 
-1. An OpenAI API key with access to GPT-4
+1. An OpenAI API key with access to your preferred model (GPT-4, GPT-3.5, GPT-4o, etc.)
 2. GitHub repository with Actions enabled
 
 ### Configuration
@@ -66,6 +70,7 @@ jobs:
           - Summary of changes
           - Technical implementation details
           - Testing requirements
+        model: "gpt-4o-mini"  # Optional: specify your preferred model
         git_diff: ${{ steps.git_diff.outputs.diff }}
 
     - name: Update PR Description
@@ -96,9 +101,9 @@ The generated description will include:
 - Technical implementation details
 - Testing requirements
 
-### Customizing the Prompt
+### Customizing the Prompt and Model
 
-You can customize the prompt to match your team's PR description format:
+You can customize the prompt to match your team's PR description format and choose your preferred LLM model:
 
 ```yaml
 - uses: alvarocperez/pull-request-description@v1.0.2
@@ -110,8 +115,21 @@ You can customize the prompt to match your team's PR description format:
       2. Architecture changes
       3. Security considerations
       4. Performance implications
+    model: "gpt-4o"  # Optional: choose your preferred model
     git_diff: ${{ steps.git_diff.outputs.diff }}
 ```
+
+### Available Models
+
+You can specify any OpenAI model that your API key has access to:
+
+- `gpt-4o-mini` (default) - Fast and cost-effective
+- `gpt-4o` - Latest and most capable
+- `gpt-4-turbo` - High performance
+- `gpt-3.5-turbo` - Cost-effective option
+- `gpt-4` - Standard GPT-4 model
+
+**Note**: The default model is `gpt-4o-mini`. If you don't specify a model, this will be used automatically.
 
 ## Contributing 🤝
 
@@ -120,7 +138,7 @@ Contributions are welcome! Here's how you can help:
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/alvarocperez/pull-request-description.git
+   git clone https://github.com/navidshad/gpt-pr-description.git
    ```
 3. Install dependencies:
    ```bash
@@ -141,6 +159,15 @@ Contributions are welcome! Here's how you can help:
    git push origin main
    ```
 8. Create a Pull Request
+
+### Acknowledgments 🙏
+
+This action is based on the excellent work by [@alvarocperez](https://github.com/alvarocperez) in the original [pull-request-description](https://github.com/alvarocperez/pull-request-description) repository. The improvements in this fork include:
+
+- Configurable LLM model selection
+- Updated default model to GPT-4o-mini
+- Enhanced documentation
+- Backward compatibility with the original action
 
 ### Development Notes
 
@@ -173,7 +200,12 @@ Contributions are welcome! Here's how you can help:
    - Check that the workflow has `pull-requests: write` permission
    - Verify the `GITHUB_TOKEN` has sufficient permissions
 
-3. **Large Diffs**
+3. **Model Access Issues**
+   - Ensure your OpenAI API key has access to the specified model
+   - Check OpenAI's model availability and pricing
+   - Verify the model name is correct (e.g., `gpt-4o-mini`, `gpt-4o`, `gpt-3.5-turbo`)
+
+4. **Large Diffs**
    - The action handles large diffs by default
    - If you encounter issues, try increasing the `fetch-depth` in the checkout step
 
